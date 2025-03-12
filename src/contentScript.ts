@@ -26,17 +26,35 @@
 
     document.body.appendChild(overlay)
 
-    overlay.addEventListener('mousedown', handleMouseDown)
+    overlay.addEventListener('mousedown', event => {
+      overlay.style.pointerEvents = 'none'
+      setTimeout(() => {
+        try {
+          handleMouseDown(event, overlay)
+        } catch(err) {
+          log.error(err)
+        } finally {
+          overlay.style.pointerEvents = 'initial'
+        }
+      }, 0)
+    })
 
   }
 
   init()
 
-
-  function handleMouseDown(event: MouseEvent) {
+  function handleMouseDown(event: MouseEvent, overlay: HTMLElement) {
     const mx = event.pageX
     const my = event.pageY
-    log.info('mouse down on overlay: ', mx, my)
+    const realTarget = document.elementFromPoint(mx, my) as HTMLElement
+    if (!realTarget || typeof realTarget.getBoundingClientRect !== 'function') {
+      log.warn('no real target found', realTarget)
+      return
+    }
+    log.info('real target found', realTarget)
   }
 
+  function visualizeAnnotation(element: HTMLElement) {
+
+  }
 })()
