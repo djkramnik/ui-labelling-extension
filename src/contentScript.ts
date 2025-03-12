@@ -7,15 +7,25 @@
     error: (...args: any[]) => console.error(logPrefix, ...args)
   }
 
-  const overlayId = 'ui-labelling-overlay'
+  const globals: {
+    overlayId: string
+    annotations: ({
+      id: string
+      ref: HTMLElement
+      rect: DOMRect
+    }[])
+  } = {
+    overlayId: 'ui-labelling-overlay',
+    annotations: []
+  }
 
   function init() {
-    if (document.getElementById(overlayId)) {
+    if (document.getElementById(globals.overlayId)) {
       log.warn('overlay already present during initialization.  Aborting everything!')
       return
     }
-    const overlay = document.createElement(overlayId)
-    overlay.setAttribute('id', overlayId)
+    const overlay = document.createElement(globals.overlayId)
+    overlay.setAttribute('id', globals.overlayId)
 
     overlay.style.position = 'fixed'
     overlay.style.width = '100vw'
@@ -51,10 +61,39 @@
       log.warn('no real target found', realTarget)
       return
     }
+
+    // prevent overly big annotations
+    if (realTarget.clientWidth > (overlay.clientWidth * 0.9) && realTarget.clientHeight > (overlay.clientHeight * 0.9)) {
+      log.warn('annotation too big. skipping', realTarget)
+      return
+    }
+
     log.info('real target found', realTarget)
+
+    // create a bounding box on the overlay with all the associated doodads and callbacks
+    visualizeAnnotation(realTarget, overlay)
   }
 
-  function visualizeAnnotation(element: HTMLElement) {
+  function visualizeAnnotation(element: HTMLElement, overlay: HTMLElement) {
+    const annotation = document.createElement('div')
+    const bbox = element.getBoundingClientRect()
+    const { top, left, width, height } = bbox
+    const annotationId = String(new Date().getTime())
 
+    annotation.setAttribute('id', annotationId)
+    annotation.style.position = 'fixed'
+    annotation.style.width = width + 'px'
+    annotation.style.height = height + 'px'
+    annotation.style.top = top + 'px'
+    annotation.style.left = left + 'px'
+    annotation.style.backgroundColor = `rgba(255,0,0,0.3)`
+
+    overlay.appendChild(annotation)
+
+    globals.annotations.push({
+      id: annotationId,
+      rect: bbox,
+      ref: annotation
+    })
   }
 })()
