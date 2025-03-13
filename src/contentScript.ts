@@ -136,12 +136,14 @@
         return
       }
       const parent: HTMLElement | null = globals.currEl.parentElement
-      const children: HTMLElement[] = parent
-        ? Array.from(parent.getElementsByTagName('*'))
+      const siblings: HTMLElement[] = parent
+        ? Array.from(parent.children) as HTMLElement[]
         : []
       const currIndex: number | null = parent
         ? Array.from(parent.getElementsByTagName('*')).indexOf(globals.currEl)
         : -1
+
+      let newIndex
 
       switch(event.key) {
         case 'ArrowLeft':
@@ -149,14 +151,37 @@
             log.warn('arrowleft', 'cannot find parent node')
             break
           }
-          globals.currEl = Array.from(parent.getElementsByTagName('*'))[]
-
+          newIndex = currIndex - 1
+          if (newIndex < 0) {
+            newIndex = siblings.length - 1
+          }
+          globals.currEl = siblings[newIndex] as HTMLElement
           break
         case 'ArrowRight':
+          if (!parent || currIndex === -1) {
+            log.warn('arrowright', 'cannot find parent node')
+            break
+          }
+          newIndex = currIndex + 1
+          if (newIndex > siblings.length - 1) {
+            newIndex = 0
+          }
+          globals.currEl = siblings[newIndex] as HTMLElement
           break
         case 'ArrowUp':
+          if (!globals.currEl.parentElement) {
+            log.warn('arrowup', 'no parent node')
+            break
+          }
+          globals.currEl = globals.currEl.parentElement
           break
         case 'ArrowDown':
+          const currChildren = Array.from(globals.currEl.children)
+          if (!currChildren.length) {
+            log.warn('arrowdown', 'no children')
+            break
+          }
+          globals.currEl = globals.currEl.children[0] as HTMLElement
           break
       }
     }
