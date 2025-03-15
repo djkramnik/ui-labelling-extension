@@ -1,3 +1,20 @@
+type ExtensionState =
+| 'dormant'
+| 'initial'
+| 'navigation'
+| 'confirmation'
+
+type GlobalState = {
+  state: ExtensionState
+  currEl: null | HTMLElement
+  overlayId: string
+  annotations: ({
+    id: string
+    ref: HTMLElement
+    rect: DOMRect
+  }[])
+}
+
 ;(function main() {
   const logPrefix = '[UI-LABELLER] '
 
@@ -7,11 +24,20 @@
     error: (...args: any[]) => console.error(logPrefix, ...args)
   }
 
-  type ExtensionState =
-    | 'dormant'
-    | 'initial'
-    | 'navigation'
-    | 'confirmation'
+  function subscribeToGlobalChange(
+    g: GlobalState,
+    cb: (key: keyof GlobalState, value: any) => void) {
+    Object.keys(g).forEach(key => {
+      if (!g.hasOwnProperty(key)) {
+        return
+      }
+      Object.defineProperty(g, key, {
+        set: (value) => {
+          cb(key as keyof GlobalState, value)
+        }
+      })
+    })
+  }
 
   const globals: {
     state: ExtensionState
@@ -52,8 +78,44 @@
     overlay.style.zIndex = '666'
 
     document.body.appendChild(overlay)
+    subscribeToGlobalChange(globals, handleGlobalChange)
 
-    overlay.addEventListener('mousedown', _handleMouseWrap)
+    function handleGlobalChange(key: keyof GlobalState, value: any) {
+
+      switch(key) {
+        case 'annotations':
+          log.info('update to annotations', value)
+          break
+        case 'currEl':
+          if (globals.state === 'navigation' && value) {
+            removeBorders()
+            drawBorder(value as HTMLElement, overlay)
+          }
+          log.info('update to currEl', value)
+          break
+        case 'state':
+
+          overlay.removeEventListener('mousedown', _handleMouseWrap)
+          document.removeEventListener('keypress', handleKeyPress)
+
+          if (value === 'initial') {
+            overlay.addEventListener('mousedown', _handleMouseWrap)
+          } else if (value === 'navigation') {
+            document.addEventListener('keypress', handleKeyPress)
+          } else if (value === 'confirmation') {
+            showConfirmationPopup()
+          }
+          log.info('update to state', value)
+          break
+        default:
+          log.info('undefined globals change', key, value)
+      }
+    }
+
+    function showConfirmationPopup() {
+      window.alert('you sure about this brah')
+      globals.state = 'initial'
+    }
 
     function _handleMouseWrap(event: MouseEvent) {
       overlay.style.pointerEvents = 'none'
@@ -69,65 +131,56 @@
       }, 0)
     }
 
-  }
+    function handleMouseDown(event: MouseEvent, overlay: HTMLElement) {
+      if (globals.state !== 'initial') {
+        return
+      }
+      const mx = event.pageX
+      const my = event.pageY
+      const realTarget = document.elementFromPoint(mx, my) as HTMLElement
+      overlay.style.pointerEvents = 'initial'
 
-  init()
 
-  function handleMouseDown(event: MouseEvent, overlay: HTMLElement) {
-    if (globals.state !== 'initial') {
-      return
+      if (!realTarget || typeof realTarget.getBoundingClientRect !== 'function') {
+        log.warn('no real target found', realTarget)
+        overlay.addEventListener('mousedown', _handleMouseWrap)
+        return
+      }
+
+      // prevent overly big annotations
+      if (realTarget.clientWidth > (overlay.clientWidth * 0.9) && realTarget.clientHeight > (overlay.clientHeight * 0.9)) {
+        log.warn('annotation too big. skipping', realTarget)
+        overlay.addEventListener('mousedown', _handleMouseWrap)
+        return
+      }
+
+      log.info('real target found', realTarget)
+
+      // create a bounding box on the overlay with all the associated doodads and callbacks
+      globals.state = 'navigation'
+      globals.currEl = realTarget
     }
-    const mx = event.pageX
-    const my = event.pageY
-    const realTarget = document.elementFromPoint(mx, my) as HTMLElement
-    overlay.style.pointerEvents = 'initial'
-    if (!realTarget || typeof realTarget.getBoundingClientRect !== 'function') {
-      log.warn('no real target found', realTarget)
-      return
+
+    function removeBorders() {
+      Array.from(document.querySelectorAll('[id*="annotation_]'))
+        .forEach(el => el.remove())
     }
 
-    // prevent overly big annotations
-    if (realTarget.clientWidth > (overlay.clientWidth * 0.9) && realTarget.clientHeight > (overlay.clientHeight * 0.9)) {
-      log.warn('annotation too big. skipping', realTarget)
-      return
-    }
+    function drawBorder(element: HTMLElement, overlay: HTMLElement) {
+      const annotation = document.createElement('div')
+      const bbox = element.getBoundingClientRect()
+      const { top, left, width, height } = bbox
+      const annotationId = String(new Date().getTime())
 
-    log.info('real target found', realTarget)
+      annotation.setAttribute('id', 'annotation_' + annotationId)
+      annotation.style.position = 'fixed'
+      annotation.style.width = width + 'px'
+      annotation.style.height = height + 'px'
+      annotation.style.top = top + 'px'
+      annotation.style.left = left + 'px'
+      annotation.style.border= `2px solid #0FFF50`
 
-    // create a bounding box on the overlay with all the associated doodads and callbacks
-    drawBorder(realTarget, overlay)
-    globals.currEl = realTarget
-    globals.state = 'navigation'
-    handleStateChange(globals.state)
-  }
-
-  function drawBorder(element: HTMLElement, overlay: HTMLElement) {
-    const annotation = document.createElement('div')
-    const bbox = element.getBoundingClientRect()
-    const { top, left, width, height } = bbox
-    const annotationId = String(new Date().getTime())
-
-    annotation.setAttribute('id', annotationId)
-    annotation.style.position = 'fixed'
-    annotation.style.width = width + 'px'
-    annotation.style.height = height + 'px'
-    annotation.style.top = top + 'px'
-    annotation.style.left = left + 'px'
-    annotation.style.border= `2px solid #0FFF50`
-
-    overlay.appendChild(annotation)
-  }
-
-  function handleStateChange(state: ExtensionState) {
-    switch(state) {
-      case 'navigation':
-        window.addEventListener('keypress', handleKeyPress)
-        break
-      case 'confirmation':
-      case 'dormant':
-      case 'initial':
-        window.removeEventListener('keypress', handleKeyPress)
-        break
+      overlay.appendChild(annotation)
     }
 
     function handleKeyPress(event: KeyboardEvent) {
@@ -183,8 +236,15 @@
           }
           globals.currEl = globals.currEl.children[0] as HTMLElement
           break
+        case 'Enter':
+          globals.state = 'confirmation'
+          break
       }
     }
 
   }
+
+  init()
+
+
 })()
