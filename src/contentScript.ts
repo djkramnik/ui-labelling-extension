@@ -24,6 +24,15 @@ type GlobalState = {
     error: (...args: any[]) => console.error(logPrefix, ...args)
   }
 
+  const annotationLabels = [
+    'table',
+    'list',
+    'row-container',
+    'column-container',
+    'link',
+    'button'
+  ]
+
   function GlobalState(cb: (key: keyof GlobalState, value: any) => void) {
     let state: ExtensionState = 'dormant'
     let annotations: ({
@@ -67,7 +76,6 @@ type GlobalState = {
     return obj
   }
 
-
   function init() {
     const globals = GlobalState(handleGlobalChange)
     // temp measure
@@ -93,10 +101,49 @@ type GlobalState = {
 
     document.body.appendChild(overlay)
 
+    const formOverlay = document.createElement('div')
+    formOverlay.style.position = 'absolute'
+    formOverlay.style.display = 'none'
+    formOverlay.style.alignItems = 'center'
+    formOverlay.style.justifyContent = 'center'
+    formOverlay.style.top = '0'
+    formOverlay.style.left = '0'
+    formOverlay.style.width = '100%'
+    formOverlay.style.height = '100%'
+
+    const annotationForm = document.createElement('form')
+    annotationForm.style.backgroundColor = 'rgba(255, 255, 255, 0.8)'
+    annotationForm.style.borderRadius = '8px'
+    annotationForm.style.padding = '40px'
+    const formHeading = document.createElement('h3')
+    formHeading.style.color = '#333'
+    annotationForm.appendChild(formHeading)
+    const annotationSelect = document.createElement('select')
+    formOverlay.appendChild(annotationForm)
+    annotationForm.appendChild(annotationSelect)
+
+    annotationLabels.forEach((s: string) => {
+      const option = document.createElement('option')
+      option.value = s
+      option.innerText = s
+      annotationSelect.appendChild(option)
+    })
+
+    const submitButton = document.createElement('button')
+    submitButton.innerText = 'submit'
+    submitButton.setAttribute('type', 'submit')
+    annotationForm.appendChild(submitButton)
+
+    const cancelButton = document.createElement('button')
+    cancelButton.innerText = 'cancel'
+    cancelButton.setAttribute('type', 'button')
+    annotationForm.appendChild(cancelButton)
+
+    overlay.appendChild(formOverlay)
+
     globals.state = 'initial'
 
     function handleGlobalChange(key: keyof GlobalState, value: any) {
-      log.info('om gee')
       switch(key) {
         case 'annotations':
           log.info('update to annotations', value)
@@ -128,8 +175,7 @@ type GlobalState = {
     }
 
     function showConfirmationPopup() {
-      window.alert('you sure about this brah')
-      globals.state = 'initial'
+      formOverlay.style.display = 'flex'
     }
 
     function _handleMouseWrap(event: MouseEvent) {
@@ -206,7 +252,6 @@ type GlobalState = {
     }
 
     function handleKeyPress(event: KeyboardEvent) {
-      log.info('jejus', globals, event.key)
       if (!globals.currEl) {
         log.error('no current element to navigate from')
         return
@@ -221,11 +266,15 @@ type GlobalState = {
 
       let newIndex
       log.info('keypressed', event.key)
-      switch(event.key) {
 
+      switch(event.key) {
         case 'j':
           if (!parent || currIndex === -1) {
             log.warn('arrowleft', 'cannot find parent node')
+            break
+          }
+          if (siblings.length < 2) {
+            log.warn('arrowleft', 'no siblings')
             break
           }
           newIndex = currIndex - 1
@@ -239,6 +288,10 @@ type GlobalState = {
             log.warn('arrowright', 'cannot find parent node')
             break
           }
+          if (siblings.length < 2) {
+            log.warn('arrowright', 'no siblings')
+            break
+          }
           newIndex = currIndex + 1
           if (newIndex > siblings.length - 1) {
             newIndex = 0
@@ -250,7 +303,12 @@ type GlobalState = {
             log.warn('arrowup', 'no parent node')
             break
           }
-          globals.currEl = globals.currEl.parentElement
+          const firstDifferentlyShapedParent = traverseUp(globals.currEl)
+          if (!firstDifferentlyShapedParent) {
+            log.warn('arrowup', 'no differently shaped parent')
+            break
+          }
+          globals.currEl = firstDifferentlyShapedParent
           break
         case 'k':
           const currChildren = Array.from(globals.currEl.children)
@@ -258,7 +316,12 @@ type GlobalState = {
             log.warn('arrowdown', 'no children', globals.currEl)
             break
           }
-          globals.currEl = globals.currEl.children[0] as HTMLElement
+          const firstDifferentlyShapedChild = traverseDown(globals.currEl)
+          if (!firstDifferentlyShapedChild) {
+            log.warn('arrowdown', 'no differently shaped children')
+            break
+          }
+          globals.currEl = firstDifferentlyShapedChild
           break
         case 'Enter':
           globals.state = 'confirmation'
@@ -266,9 +329,47 @@ type GlobalState = {
       }
     }
 
+    // utils
+    function traverseUp(el: HTMLElement, tolerance: number = 10): HTMLElement | null {
+      if (el === document.body) {
+        return null
+      }
+      const parent = el.parentElement
+      if (!parent) {
+        return null
+      }
+      const boxesMatch = boxesTheSame(el.getBoundingClientRect(), parent.getBoundingClientRect(), tolerance)
+      if (boxesMatch) {
+        return traverseUp(parent, tolerance)
+      }
+
+      return parent
+    }
+
+    function traverseDown(el: HTMLElement, tolerance: number = 10): HTMLElement | null {
+      if (el.children.length < 1) {
+        return null
+      }
+      const bbox = el.getBoundingClientRect()
+      const firstDifferentlyShapedChild = Array.from(el.children)
+        .find(c => !boxesTheSame(
+          bbox,
+          c.getBoundingClientRect(),
+          tolerance))
+      if (firstDifferentlyShapedChild) {
+        return firstDifferentlyShapedChild as HTMLElement
+      }
+      return traverseDown(el.children[0] as HTMLElement, tolerance)
+    }
+
+    function boxesTheSame (bb1: DOMRect, bb2: DOMRect, tolerance: number): boolean {
+      return Math.abs(bb1.top - bb2.top) < tolerance &&
+        Math.abs(bb1.left - bb2.left) < tolerance &&
+        Math.abs(bb1.right - bb2.right) < tolerance &&
+        Math.abs(bb1.bottom - bb2.bottom) < tolerance
+    }
   }
 
   init()
-
 
 })()
