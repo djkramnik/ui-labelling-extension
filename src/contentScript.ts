@@ -24,38 +24,52 @@ type GlobalState = {
     error: (...args: any[]) => console.error(logPrefix, ...args)
   }
 
-  function subscribeToGlobalChange(
-    g: GlobalState,
-    cb: (key: keyof GlobalState, value: any) => void) {
-    Object.keys(g).forEach(key => {
-      if (!g.hasOwnProperty(key)) {
-        return
-      }
-      Object.defineProperty(g, key, {
-        set: (value) => {
-          cb(key as keyof GlobalState, value)
-        }
-      })
-    })
-  }
-
-  const globals: {
-    state: ExtensionState
-    currEl: null | HTMLElement
-    overlayId: string
-    annotations: ({
+  function GlobalState(cb: (key: keyof GlobalState, value: any) => void) {
+    let state: ExtensionState = 'dormant'
+    let annotations: ({
       id: string
       ref: HTMLElement
       rect: DOMRect
-    }[])
-  } = {
-    state: 'initial',
-    overlayId: 'ui-labelling-overlay',
-    annotations: [],
-    currEl: null
+    }[]) = []
+    let overlayId: string = 'ui-labelling-overlay'
+    let currEl: HTMLElement | null = null
+    const obj: GlobalState = {
+      state,
+      annotations,
+      overlayId,
+      currEl,
+    }
+    Object.defineProperty(obj, 'state', {
+      set: (value) => {
+        cb('state', value)
+        state = value
+      },
+      get: () => state
+    });
+    Object.defineProperty(obj, 'annotations', {
+      set: (value) => {
+        cb('annotations', value)
+        annotations = value
+      },
+      get: () => annotations
+    });
+    Object.defineProperty(obj, 'overlayId', {
+      get: () => overlayId
+    });
+    Object.defineProperty(obj, 'currEl', {
+      set: (value) => {
+        cb('currEl', value)
+        currEl = value
+      },
+      get: () => currEl
+    })
+
+    return obj
   }
 
+
   function init() {
+    const globals = GlobalState(handleGlobalChange)
     // temp measure
     // I want to keep this extension active but not screw up my regular navigating while I develop it
     if (window.location.href !== 'https://news.ycombinator.com/') {
@@ -78,10 +92,11 @@ type GlobalState = {
     overlay.style.zIndex = '666'
 
     document.body.appendChild(overlay)
-    subscribeToGlobalChange(globals, handleGlobalChange)
+
+    globals.state = 'initial'
 
     function handleGlobalChange(key: keyof GlobalState, value: any) {
-
+      log.info('om gee')
       switch(key) {
         case 'annotations':
           log.info('update to annotations', value)
@@ -94,14 +109,14 @@ type GlobalState = {
           log.info('update to currEl', value)
           break
         case 'state':
-
           overlay.removeEventListener('mousedown', _handleMouseWrap)
-          document.removeEventListener('keypress', handleKeyPress)
+          window.removeEventListener('keypress', handleKeyPress)
 
           if (value === 'initial') {
             overlay.addEventListener('mousedown', _handleMouseWrap)
+            log.info('added mousedown listener')
           } else if (value === 'navigation') {
-            document.addEventListener('keypress', handleKeyPress)
+            window.addEventListener('keypress', handleKeyPress)
           } else if (value === 'confirmation') {
             showConfirmationPopup()
           }
@@ -118,6 +133,7 @@ type GlobalState = {
     }
 
     function _handleMouseWrap(event: MouseEvent) {
+      log.info('_handleMouseWrap')
       overlay.style.pointerEvents = 'none'
       overlay.removeEventListener('mousedown', _handleMouseWrap)
       setTimeout(() => {
@@ -132,14 +148,18 @@ type GlobalState = {
     }
 
     function handleMouseDown(event: MouseEvent, overlay: HTMLElement) {
+      log.info('_handleMouseDown', event)
       if (globals.state !== 'initial') {
+        log.warn('I shall return', globals)
         return
       }
+
       const mx = event.pageX
       const my = event.pageY
       const realTarget = document.elementFromPoint(mx, my) as HTMLElement
       overlay.style.pointerEvents = 'initial'
 
+      log.info('real target?', realTarget)
 
       if (!realTarget || typeof realTarget.getBoundingClientRect !== 'function') {
         log.warn('no real target found', realTarget)
@@ -162,11 +182,13 @@ type GlobalState = {
     }
 
     function removeBorders() {
-      Array.from(document.querySelectorAll('[id*="annotation_]'))
+      log.info('_removeBorders')
+      Array.from(document.querySelectorAll('[id*="annotation_"]'))
         .forEach(el => el.remove())
     }
 
     function drawBorder(element: HTMLElement, overlay: HTMLElement) {
+      log.info('drawBorder')
       const annotation = document.createElement('div')
       const bbox = element.getBoundingClientRect()
       const { top, left, width, height } = bbox
@@ -184,6 +206,7 @@ type GlobalState = {
     }
 
     function handleKeyPress(event: KeyboardEvent) {
+      log.info('jejus', globals, event.key)
       if (!globals.currEl) {
         log.error('no current element to navigate from')
         return
@@ -193,13 +216,14 @@ type GlobalState = {
         ? Array.from(parent.children) as HTMLElement[]
         : []
       const currIndex: number | null = parent
-        ? Array.from(parent.getElementsByTagName('*')).indexOf(globals.currEl)
+        ? Array.from(parent.children).indexOf(globals.currEl)
         : -1
 
       let newIndex
-
+      log.info('keypressed', event.key)
       switch(event.key) {
-        case 'ArrowLeft':
+
+        case 'j':
           if (!parent || currIndex === -1) {
             log.warn('arrowleft', 'cannot find parent node')
             break
@@ -210,7 +234,7 @@ type GlobalState = {
           }
           globals.currEl = siblings[newIndex] as HTMLElement
           break
-        case 'ArrowRight':
+        case 'l':
           if (!parent || currIndex === -1) {
             log.warn('arrowright', 'cannot find parent node')
             break
@@ -221,17 +245,17 @@ type GlobalState = {
           }
           globals.currEl = siblings[newIndex] as HTMLElement
           break
-        case 'ArrowUp':
-          if (!globals.currEl.parentElement) {
+        case 'i':
+          if (!globals.currEl.parentElement || globals.currEl.parentElement === document.body) {
             log.warn('arrowup', 'no parent node')
             break
           }
           globals.currEl = globals.currEl.parentElement
           break
-        case 'ArrowDown':
+        case 'k':
           const currChildren = Array.from(globals.currEl.children)
           if (!currChildren.length) {
-            log.warn('arrowdown', 'no children')
+            log.warn('arrowdown', 'no children', globals.currEl)
             break
           }
           globals.currEl = globals.currEl.children[0] as HTMLElement
