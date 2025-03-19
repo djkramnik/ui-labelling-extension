@@ -117,10 +117,25 @@ type GlobalState = {
     annotationForm.style.padding = '40px'
     const formHeading = document.createElement('h3')
     formHeading.style.color = '#333'
+    formHeading.innerText = 'Set Label'
     annotationForm.appendChild(formHeading)
     const annotationSelect = document.createElement('select')
     formOverlay.appendChild(annotationForm)
     annotationForm.appendChild(annotationSelect)
+
+    annotationForm.addEventListener('submit', event => {
+      event.preventDefault()
+      log.info(annotationSelect.value)
+      if (globals.currEl !== null) {
+        globals.annotations = globals.annotations.concat({
+          id: String(new Date().getTime()),
+          ref: globals.currEl,
+          rect: globals.currEl.getBoundingClientRect()
+        })
+      }
+
+      globals.state = 'initial'
+    })
 
     annotationLabels.forEach((s: string) => {
       const option = document.createElement('option')
@@ -156,10 +171,12 @@ type GlobalState = {
           log.info('update to currEl', value)
           break
         case 'state':
+          formOverlay.style.display = 'none'
           overlay.removeEventListener('mousedown', _handleMouseWrap)
           window.removeEventListener('keypress', handleKeyPress)
 
           if (value === 'initial') {
+            removeBorders()
             overlay.addEventListener('mousedown', _handleMouseWrap)
             log.info('added mousedown listener')
           } else if (value === 'navigation') {
@@ -268,6 +285,9 @@ type GlobalState = {
       log.info('keypressed', event.key)
 
       switch(event.key) {
+        case 'q':
+          globals.state = 'initial'
+          break
         case 'j':
           if (!parent || currIndex === -1) {
             log.warn('arrowleft', 'cannot find parent node')
