@@ -5,6 +5,7 @@ type ExtensionState =
 | 'confirmation'
 
 type GlobalState = {
+  showAnnotations: boolean
   state: ExtensionState
   currEl: null | HTMLElement
   overlayId: string
@@ -42,11 +43,14 @@ type GlobalState = {
     }[]) = []
     let overlayId: string = 'ui-labelling-overlay'
     let currEl: HTMLElement | null = null
+    let showAnnotations: boolean = false
+
     const obj: GlobalState = {
       state,
       annotations,
       overlayId,
       currEl,
+      showAnnotations
     }
     Object.defineProperty(obj, 'state', {
       set: (value) => {
@@ -71,6 +75,13 @@ type GlobalState = {
         currEl = value
       },
       get: () => currEl
+    })
+    Object.defineProperty(obj, 'showAnotations', {
+      set: (value) => {
+        cb('showAnnotations', value)
+        showAnnotations = value
+      },
+      get: () => showAnnotations
     })
 
     return obj
@@ -158,6 +169,10 @@ type GlobalState = {
 
     globals.state = 'initial'
 
+    // state independent keypress events that should always be active
+    window.addEventListener('keypress', handleKeyPress)
+
+    // janky redux style state handling mega function
     function handleGlobalChange(key: keyof GlobalState, value: any) {
       switch(key) {
         case 'annotations':
@@ -165,31 +180,49 @@ type GlobalState = {
           break
         case 'currEl':
           if (globals.state === 'navigation' && value) {
-            removeBorders()
-            drawBorder(value as HTMLElement, overlay)
+            removeRects()
+            drawRect({
+              element: value as HTMLElement,
+              parent: overlay
+            })
           }
           log.info('update to currEl', value)
           break
         case 'state':
           formOverlay.style.display = 'none'
           overlay.removeEventListener('mousedown', _handleMouseWrap)
-          window.removeEventListener('keypress', handleKeyPress)
+          window.removeEventListener('keypress', handleNavigationKeyPress)
 
           if (value === 'initial') {
-            removeBorders()
+            removeRects()
             overlay.addEventListener('mousedown', _handleMouseWrap)
             log.info('added mousedown listener')
           } else if (value === 'navigation') {
-            window.addEventListener('keypress', handleKeyPress)
+            window.addEventListener('keypress', handleNavigationKeyPress)
           } else if (value === 'confirmation') {
             showConfirmationPopup()
           }
           log.info('update to state', value)
           break
+        case 'showAnnotations':
+          globals.annotations.forEach(({ ref }) => ref.remove())
+          if (value) {
+            globals.annotations.forEach(({ id, ref }) => {
+              // will need delete buttons in here
+              drawRect({
+                id,
+                element: ref,
+                parent: overlay
+              })
+            })
+          }
+          break
         default:
           log.info('undefined globals change', key, value)
       }
     }
+
+    // CALLBACK SOUP
 
     function showConfirmationPopup() {
       formOverlay.style.display = 'flex'
@@ -244,20 +277,27 @@ type GlobalState = {
       globals.currEl = realTarget
     }
 
-    function removeBorders() {
-      log.info('_removeBorders')
-      Array.from(document.querySelectorAll('[id*="annotation_"]'))
+    function removeRects(selector: string = '[id*="candidate_annotation_"]') {
+      Array.from(document.querySelectorAll(selector))
         .forEach(el => el.remove())
     }
 
-    function drawBorder(element: HTMLElement, overlay: HTMLElement) {
-      log.info('drawBorder')
+    function drawRect({
+      element,
+      parent,
+      styles,
+      id,
+    }: {
+      element: HTMLElement
+      parent: HTMLElement
+      styles?: Record<keyof CSSStyleDeclaration, string>
+      id?: string
+    }) {
       const annotation = document.createElement('div')
       const bbox = element.getBoundingClientRect()
       const { top, left, width, height } = bbox
-      const annotationId = String(new Date().getTime())
 
-      annotation.setAttribute('id', 'annotation_' + annotationId)
+      annotation.setAttribute('id', id ?? `${'candidate_annotation_'}${new Date().getTime()}`)
       annotation.style.position = 'fixed'
       annotation.style.width = width + 'px'
       annotation.style.height = height + 'px'
@@ -265,10 +305,18 @@ type GlobalState = {
       annotation.style.left = left + 'px'
       annotation.style.border= `2px solid #0FFF50`
 
-      overlay.appendChild(annotation)
+      if (styles) {
+        Object.entries(styles)
+          .forEach(([k, v]) => {
+            // @ts-ignore
+            annotation.style[k] = v
+          })
+      }
+      parent.appendChild(annotation)
     }
 
-    function handleKeyPress(event: KeyboardEvent) {
+    // this is active only when the global state is "navigation"
+    function handleNavigationKeyPress(event: KeyboardEvent) {
       if (!globals.currEl) {
         log.error('no current element to navigate from')
         return
@@ -285,9 +333,11 @@ type GlobalState = {
       log.info('keypressed', event.key)
 
       switch(event.key) {
+        // quit navigation mode and return to initial
         case 'q':
           globals.state = 'initial'
           break
+        // ijlk navigating the DOM
         case 'j':
           if (!parent || currIndex === -1) {
             log.warn('arrowleft', 'cannot find parent node')
@@ -343,13 +393,26 @@ type GlobalState = {
           }
           globals.currEl = firstDifferentlyShapedChild
           break
+        // after settling on what to label, hit enter to bring up label dropdown
         case 'Enter':
           globals.state = 'confirmation'
           break
       }
     }
 
-    // utils
+    // this is always active, regardless of the global state value.
+    function handleKeyPress(event: KeyboardEvent) {
+      switch(event.key) {
+        case 'a':
+          log.info('toggling annotations')
+          globals.showAnnotations = !globals.showAnnotations
+          break
+      }
+    }
+
+    // END CALLBACK SOUP
+
+    // SO CALLED UTILS
     function traverseUp(el: HTMLElement, tolerance: number = 10): HTMLElement | null {
       if (el === document.body) {
         return null
@@ -388,6 +451,8 @@ type GlobalState = {
         Math.abs(bb1.right - bb2.right) < tolerance &&
         Math.abs(bb1.bottom - bb2.bottom) < tolerance
     }
+
+    // END OF SO CALLED UTILS
   }
 
   init()
