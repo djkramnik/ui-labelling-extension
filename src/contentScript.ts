@@ -27,6 +27,7 @@ type GlobalState = {
 }
 
 ;(function main() {
+  const storageKey = 'annotations'
   const logPrefix = '[UI-LABELLER] '
 
   const log = {
@@ -193,6 +194,9 @@ type GlobalState = {
     function handleGlobalChange(key: keyof GlobalState, value: any) {
       switch(key) {
         case 'annotations':
+          chrome.storage.local.set({
+            [storageKey]: JSON.stringify(value)
+          })
           log.info('update to annotations', value)
           break
         case 'currEl':
