@@ -4,6 +4,15 @@ type ExtensionState =
 | 'navigation'
 | 'confirmation'
 
+enum AnnotationLabel {
+  table = 'table',
+  list = 'list',
+  rowContainer = 'row-container',
+  columnContainer = 'column-container',
+  link = 'link',
+  button = 'button'
+}
+
 type GlobalState = {
   showAnnotations: boolean
   state: ExtensionState
@@ -13,6 +22,7 @@ type GlobalState = {
     id: string
     ref: HTMLElement
     rect: DOMRect
+    label: AnnotationLabel
   }[])
 }
 
@@ -25,14 +35,15 @@ type GlobalState = {
     error: (...args: any[]) => console.error(logPrefix, ...args)
   }
 
-  const annotationLabels = [
-    'table',
-    'list',
-    'row-container',
-    'column-container',
-    'link',
-    'button'
-  ]
+  // label, color
+  const annotationLabels: Record<AnnotationLabel, string> = {
+    table: '#d0fffe',
+    list: '#fffddb',
+    'row-container': '#e4ffde',
+    'column-container': '#ffd3fd',
+    link: '#ffe7d3',
+    button: '#f08080'
+  }
 
   function GlobalState(cb: (key: keyof GlobalState, value: any) => void) {
     let state: ExtensionState = 'dormant'
@@ -40,6 +51,7 @@ type GlobalState = {
       id: string
       ref: HTMLElement
       rect: DOMRect
+      label: AnnotationLabel
     }[]) = []
     let overlayId: string = 'ui-labelling-overlay'
     let currEl: HTMLElement | null = null
@@ -137,18 +149,23 @@ type GlobalState = {
     annotationForm.addEventListener('submit', event => {
       event.preventDefault()
       log.info(annotationSelect.value)
+      if (!annotationSelect.value) {
+        log.warn('no label selected?')
+      }
+
       if (globals.currEl !== null) {
         globals.annotations = globals.annotations.concat({
           id: String(new Date().getTime()),
           ref: globals.currEl,
-          rect: globals.currEl.getBoundingClientRect()
+          rect: globals.currEl.getBoundingClientRect(),
+          label: annotationSelect.value as AnnotationLabel
         })
       }
 
       globals.state = 'initial'
     })
 
-    annotationLabels.forEach((s: string) => {
+    Object.keys(annotationLabels).forEach((s: string) => {
       const option = document.createElement('option')
       option.value = s
       option.innerText = s
@@ -211,12 +228,18 @@ type GlobalState = {
             ({ id }) => document.getElementById(id)?.remove()
           )
           if (value) {
-            globals.annotations.forEach(({ id, ref }) => {
+            globals.annotations.forEach(({ id, ref, label }) => {
+              const c = annotationLabels[label]
               // will need delete buttons in here
               drawRect({
                 id,
                 element: ref,
-                parent: overlay
+                parent: overlay,
+                styles: {
+                  border: '2px solid ' + c,
+                  backgroundColor: c,
+                  opacity: '0.6'
+                }
               })
             })
           }
@@ -294,7 +317,7 @@ type GlobalState = {
     }: {
       element: HTMLElement
       parent: HTMLElement
-      styles?: Record<keyof CSSStyleDeclaration, string>
+      styles?: Partial<Record<keyof CSSStyleDeclaration, string>>
       id?: string
     }) {
       const annotation = document.createElement('div')
