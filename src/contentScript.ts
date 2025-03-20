@@ -76,7 +76,7 @@ type GlobalState = {
       },
       get: () => currEl
     })
-    Object.defineProperty(obj, 'showAnotations', {
+    Object.defineProperty(obj, 'showAnnotations', {
       set: (value) => {
         cb('showAnnotations', value)
         showAnnotations = value
@@ -202,10 +202,14 @@ type GlobalState = {
           } else if (value === 'confirmation') {
             showConfirmationPopup()
           }
+
           log.info('update to state', value)
           break
         case 'showAnnotations':
-          globals.annotations.forEach(({ ref }) => ref.remove())
+          log.info('show annotations handler', value)
+          globals.annotations.forEach(
+            ({ id }) => document.getElementById(id)?.remove()
+          )
           if (value) {
             globals.annotations.forEach(({ id, ref }) => {
               // will need delete buttons in here
