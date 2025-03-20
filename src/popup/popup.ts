@@ -1,3 +1,4 @@
+
 document.addEventListener('DOMContentLoaded', () => {
   const storageKey = 'annotations'
 
@@ -14,8 +15,17 @@ document.addEventListener('DOMContentLoaded', () => {
     exportBtn.setAttribute('disabled', 'disabled')
     const obj = await chrome.storage.local.get(storageKey)
     exportBtn.removeAttribute('disabled')
+
+    const annotations = JSON.parse(obj[storageKey]) as {
+      id: string
+      ref: HTMLElement
+      rect: DOMRect
+      label: AnnotationLabel
+    }[]
+
+
     navigator.clipboard.writeText(
-      obj[storageKey]
+      JSON.stringify(annotations.map(({ref, ...rest}) => ({ ...rest})))
     )
   })
 
