@@ -105,6 +105,9 @@ type GlobalState = {
     return obj
   }
 
+  const trashCanUrl = chrome.runtime.getURL('/assets/trash-can.svg')
+  log.info('asset', trashCanUrl)
+
   function main() {
     const globals = GlobalState(handleGlobalChange)
     // temp measure
@@ -323,11 +326,13 @@ type GlobalState = {
       parent,
       styles,
       id,
+      child,
     }: {
       element: HTMLElement
       parent: HTMLElement
       styles?: Partial<Record<keyof CSSStyleDeclaration, string>>
       id?: string
+      child?: HTMLElement
     }) {
       const annotation = document.createElement('div')
       const bbox = element.getBoundingClientRect()
@@ -444,15 +449,6 @@ type GlobalState = {
           log.info('toggling annotations')
           globals.showAnnotations = !globals.showAnnotations
           break
-        case 's':
-          // TODO: need toast
-          log.info('taking screenshot')
-          takeScreenshot()
-            .then(() => {
-              log.info('screenshot saved')
-            })
-          break
-        case 'd':
           log.info('downloading...')
           chrome.storage.local.get([StorageKeys.annotations, StorageKeys.screenshot])
             .then((obj) => {
@@ -502,31 +498,6 @@ type GlobalState = {
         Math.abs(bb1.left - bb2.left) < tolerance &&
         Math.abs(bb1.right - bb2.right) < tolerance &&
         Math.abs(bb1.bottom - bb2.bottom) < tolerance
-    }
-
-    async function takeScreenshot() {
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      const video = document.createElement('video')
-      if (!ctx) {
-        // fur typescript
-        log.warn('screenshot failed; cannot get context')
-        return
-      }
-
-      try {
-        const captureStream = await navigator.mediaDevices.getDisplayMedia()
-        video.srcObject = captureStream
-        ctx.drawImage(video, 0, 0, window.innerWidth, window.innerHeight)
-        const base64Canvas = canvas.toDataURL("image/jpeg").split(';base64,')[1]
-
-        return chrome.storage.local.set({
-          [StorageKeys.screenshot]: base64Canvas
-        })
-      } catch (err) {
-        log.error('screenshot failed with error', err)
-        return Promise.reject(err)
-      }
     }
 
     // END OF SO CALLED UTILS

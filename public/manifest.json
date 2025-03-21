@@ -15,5 +15,11 @@
       "js": ["contentScript.js"]
     }
   ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "permissions": ["activeTab", "storage", "downloads"]
 }
