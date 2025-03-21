@@ -4,6 +4,12 @@ type ExtensionState =
 | 'navigation'
 | 'confirmation'
 
+enum StorageKeys {
+  annotations = 'annotations',
+  screenshot = 'screenshot',
+  meta = 'meta'
+}
+
 enum AnnotationLabel {
   table = 'table',
   list = 'list',
@@ -27,7 +33,6 @@ type GlobalState = {
 }
 
 ;(function main() {
-  const storageKey = 'annotations'
   const logPrefix = '[UI-LABELLER] '
 
   const log = {
@@ -100,7 +105,7 @@ type GlobalState = {
     return obj
   }
 
-  function init() {
+  function main() {
     const globals = GlobalState(handleGlobalChange)
     // temp measure
     // I want to keep this extension active but not screw up my regular navigating while I develop it
@@ -195,7 +200,7 @@ type GlobalState = {
       switch(key) {
         case 'annotations':
           chrome.storage.local.set({
-            [storageKey]: JSON.stringify(value)
+            [StorageKeys.annotations]: JSON.stringify(value)
           })
           log.info('update to annotations', value)
           break
@@ -432,11 +437,27 @@ type GlobalState = {
     }
 
     // this is always active, regardless of the global state value.
+    // TODO some kind of type system to prevent event key collision on keypress handling...
     function handleKeyPress(event: KeyboardEvent) {
       switch(event.key) {
         case 'a':
           log.info('toggling annotations')
           globals.showAnnotations = !globals.showAnnotations
+          break
+        case 's':
+          // TODO: need toast
+          log.info('taking screenshot')
+          takeScreenshot()
+            .then(() => {
+              log.info('screenshot saved')
+            })
+          break
+        case 'd':
+          log.info('downloading...')
+          chrome.storage.local.get([StorageKeys.annotations, StorageKeys.screenshot])
+            .then((obj) => {
+
+            })
           break
       }
     }
@@ -483,9 +504,34 @@ type GlobalState = {
         Math.abs(bb1.bottom - bb2.bottom) < tolerance
     }
 
+    async function takeScreenshot() {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const video = document.createElement('video')
+      if (!ctx) {
+        // fur typescript
+        log.warn('screenshot failed; cannot get context')
+        return
+      }
+
+      try {
+        const captureStream = await navigator.mediaDevices.getDisplayMedia()
+        video.srcObject = captureStream
+        ctx.drawImage(video, 0, 0, window.innerWidth, window.innerHeight)
+        const base64Canvas = canvas.toDataURL("image/jpeg").split(';base64,')[1]
+
+        return chrome.storage.local.set({
+          [StorageKeys.screenshot]: base64Canvas
+        })
+      } catch (err) {
+        log.error('screenshot failed with error', err)
+        return Promise.reject(err)
+      }
+    }
+
     // END OF SO CALLED UTILS
   }
 
-  init()
+  main()
 
 })()
