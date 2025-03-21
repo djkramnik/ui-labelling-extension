@@ -247,6 +247,15 @@ type GlobalState = {
               removeIcon.style.position = 'absolute'
               removeIcon.style.right = '0'
               removeIcon.style.height = '100%'
+              removeIcon.style.cursor = 'pointer'
+              removeIcon.style.zIndex = '2'
+              removeIcon.addEventListener('mousedown', (event) => {
+                event.stopPropagation()
+                // filter annotation out of the global state var
+                globals.annotations = globals.annotations.filter(a => a.id !== id)
+                // fragile
+                removeIcon.parentElement?.remove()
+              })
               // will need delete buttons in here
               drawRect({
                 id,
@@ -255,7 +264,8 @@ type GlobalState = {
                 styles: {
                   border: '2px solid ' + c,
                   backgroundColor: c,
-                  opacity: '0.6'
+                  opacity: '0.6',
+                  zIndex: '2',
                 },
                 child: removeIcon
               })
