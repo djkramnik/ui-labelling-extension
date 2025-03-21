@@ -242,6 +242,11 @@ type GlobalState = {
           if (value) {
             globals.annotations.forEach(({ id, ref, label }) => {
               const c = annotationLabels[label]
+              const removeIcon = document.createElement('img')
+              removeIcon.setAttribute('src', trashCanUrl)
+              removeIcon.style.position = 'absolute'
+              removeIcon.style.right = '0'
+              removeIcon.style.height = '100%'
               // will need delete buttons in here
               drawRect({
                 id,
@@ -251,7 +256,8 @@ type GlobalState = {
                   border: '2px solid ' + c,
                   backgroundColor: c,
                   opacity: '0.6'
-                }
+                },
+                child: removeIcon
               })
             })
           }
@@ -346,12 +352,17 @@ type GlobalState = {
       annotation.style.left = left + 'px'
       annotation.style.border= `2px solid #0FFF50`
 
+      // override styles if any
       if (styles) {
         Object.entries(styles)
           .forEach(([k, v]) => {
             // @ts-ignore
             annotation.style[k] = v
           })
+      }
+      // custom child element if any
+      if (child) {
+        annotation.appendChild(child)
       }
       parent.appendChild(annotation)
     }
